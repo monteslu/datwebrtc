@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@material-ui/core": "^3.1.2",
     "react": "^16.5.2",
     "react-dom": "^16.5.2",
-    "react-scripts": "2.0.3"
+    "react-scripts": "2.0.3",
+    "uuid": "^3.3.2",
+    "webcrypto-crypt": "^0.1.18"
   },
   "scripts": {
     "start": "react-scripts start",

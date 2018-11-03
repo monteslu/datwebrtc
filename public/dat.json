@@ -1,0 +1,7 @@
+{
+  "title": "dat-webrtc2",
+  "description": "RTC signaling over datPeers",
+  "experimental": {
+    "apis": ["datPeers"]
+  }
+}
