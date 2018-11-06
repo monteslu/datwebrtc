@@ -2,4 +2,4 @@
 
 Completely decentralized voice, video & chat without a signaling server.
 
-Live example partially working in Beaker Browser [rtc.hashbase.io](dat://rtc.hashbase.io)
+Live example partially working in Beaker Browser: [dat://rtc.hashbase.io](dat://rtc.hashbase.io)
