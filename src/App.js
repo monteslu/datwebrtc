@@ -16,9 +16,19 @@ const styles = {
   },
 }
 
+
+
 //for debugging in console.
 global.encrypt = encrypt;
 global.decrypt = decrypt;
+
+async function getMyId() {
+  return global.experimental && global.experimental.datPeers ? await global.experimental.datPeers.getOwnPeerId() : config.myId;
+}
+
+const myPeerId = getMyId();
+
+
 
 class App extends Component {
   constructor(props) {
@@ -32,8 +42,7 @@ class App extends Component {
       room: localStorage.room || '',
       me: {
         peer: new RTCPeerConnection(config.rtc.cfg, config.rtc.options),
-        events,
-        myPeerId: config.myId //until https://github.com/beakerbrowser/beaker/issues/1182
+        events
       },
       peers: []
     }
@@ -62,9 +71,82 @@ class App extends Component {
       }
     });
 
+
+  }
+
+  startVideo = async () => {
+    const { me } = this.state;
+    const hdConstraints = {
+      video: true,
+      audio: true
+    };
+
+    return new Promise(async (resolve, reject) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(hdConstraints);
+        const track = stream.getVideoTracks()[0];
+        const audioTrack = stream.getAudioTracks()[0];
+
+        console.log({audioTrack: !!audioTrack, track: !!track});
+
+        me.track = track;
+        me.stream = stream;
+        me.audioTrack = audioTrack;
+        me.events.on('peerCreated', () => {
+          console.log('peer created');
+          if(track) {
+            me.peer.addTrack(track, stream);
+          }
+          if(audioTrack) {
+            me.peer.addTrack(audioTrack, stream);
+          }
+        });
+        
+
+        const videoElement = this.localVideoRef.current; // document.createElement('video');
+        const cameraCanvas = document.createElement('canvas');
+
+        videoElement.addEventListener('loadeddata', async (e) => {
+          cameraCanvas.height = videoElement.videoHeight;
+          cameraCanvas.width = videoElement.videoWidth;
+          videoElement.height = videoElement.videoHeight;
+          videoElement.width = videoElement.videoWidth;
+
+          console.log({video: {height: videoElement.height, width: videoElement.width}});
+          
+          const ctx = cameraCanvas.getContext('2d');
+          await new Promise((res) => {
+            // sometimes video take a bit to initialize
+            setTimeout(() => res('ok'), 500);
+          });
+          ctx.drawImage(videoElement, 0, 0, videoElement.videoWidth, videoElement.videoHeight);
+          resolve(cameraCanvas.toDataURL());
+        });
+
+        const ms = new MediaStream();
+        ms.addTrack(track);
+
+        videoElement.srcObject = ms;
+        videoElement.load();
+        await videoElement.play();
+        console.log('setup video', videoElement);
+      } catch(err) {
+        console.log('video start err', err);
+        reject(err);
+      }
+      
+    });
+
+  }
+
+  async componentWillMount() {
+    const myPeerId = await getMyId();
+    const { me } = this.state;
+    me.myPeerId = myPeerId;
+    console.log('myPeerId', myPeerId);
     if(window.experimental) {
       console.log('experimental good, starting up...');
-      window.experimental.datPeers.broadcast({message: `hello from ${this.state.me.myPeerId}`});
+      window.experimental.datPeers.broadcast({message: `hello from ${me.myPeerId}`});
       window.experimental.datPeers.getSessionData()
         .then((data) => {
           console.log('sessiondata', data);
@@ -107,6 +189,9 @@ class App extends Component {
       });
     }
 
+    me.events.on('dataChannelReady', () => {
+      this.setState({dataChannelReady: true});
+    });                   
 
   }
 
@@ -116,16 +201,13 @@ class App extends Component {
     });
   };
 
-  handleJoin = () => {
+  handleJoin = async () => {
     this.setState({joining: true});
     localStorage.username = this.state.username;
     localStorage.room = this.state.room;
-    createOffer(this.state)
-      .then((result) => {
-        console.log('result', result);
-        this.localVideoRef.current.src = result.streamUrl;
-        this.localVideoRef.current.play();
-      });
+    this.state.me.cameraShot = await this.startVideo();
+    
+    const result = createOffer(this.state);
     this.setState({connected: true});
   };
 
@@ -185,7 +267,7 @@ class App extends Component {
           )
         })}
 
-        {this.state.connected ? (
+        {this.state.dataChannelReady ? (
           <div className="messageBox">
             <div className="messages">
             {map(this.state.messages, (mess) => {

@@ -1,7 +1,8 @@
 {
-  "title": "dat-webrtc2",
+  "title": "webrtc",
   "description": "RTC signaling over datPeers",
+  "type": ["website"],
   "experimental": {
-    "apis": ["datPeers"]
+    "apis": ["datPeers", "globalFetch", "library"]
   }
 }

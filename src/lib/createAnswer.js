@@ -41,7 +41,7 @@ export default function createAnswer (msg, {room, password, me}) {
       .then((decryptedOffer) => {
 
         const offerDesc = new RTCSessionDescription(JSON.parse(decryptedOffer));
-        const peer = new RTCPeerConnection(config.rtc.cfg, config.rtc.con);
+        const { peer } = me;
         const remotePeer = {
           peer,
           peerId: msg.from

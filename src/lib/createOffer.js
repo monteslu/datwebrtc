@@ -38,10 +38,19 @@ export default function createLocalOffer ({room, password, me}) {
     const retVal = {};
 
     me.peer.onaddstream = (e) => {
-      console.log('Got remote stream from answerer', e.stream, e)
+     console.log('Got remote stream from answerer', e.stream, e)
       // var el = document.getElementById('remoteVideo')
       // el.autoplay = true
       // attachMediaStream(el, e.stream)
+      me.events.emit('streamAdded', e);
+    }
+
+    me.peer.onaddtrack= (e) => {
+      console.log('Got remote TRACK from answerer', e.stream, e)
+      // var el = document.getElementById('remoteVideo')
+      // el.autoplay = true
+      // attachMediaStream(el, e.stream)
+      me.events.emit('trackAdded', e);
     }
 
     me.peer.onconnection = (e) => {
@@ -54,6 +63,7 @@ export default function createLocalOffer ({room, password, me}) {
       // activedc = dc1
       // console.log('Created datachannel (pc1)')
       me.dataChannel.onopen = function (e) {
+        me.events.emit('dataChannelReady', e);
         console.log('data channel connect', e);
         me.dataChannel.send(JSON.stringify({message: 'hello from offerer!'}));
       }
@@ -98,17 +108,6 @@ export default function createLocalOffer ({room, password, me}) {
     me.peer.oniceconnectionstatechange = oniceconnectionstatechange;
     me.peer.onicegatheringstatechange = onicegatheringstatechange;
     
-    navigator.getUserMedia({video: true, audio: true}, function (stream) {
-      // var video = document.getElementById('localVideo')
-      retVal.streamUrl = window.URL.createObjectURL(stream);
-      me.peer.addStream(stream);
-      me.stream = stream;
-      
-    }, function (error) {
-      console.log('Error adding stream to pc1: ' + error);
-      reject(error);
-    });
-
 
   });
   
