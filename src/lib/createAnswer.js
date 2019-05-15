@@ -3,34 +3,16 @@ import { encrypt, decrypt } from './crypto';
 import config from '../config';
 
 
-// var pc2icedone = false
-
-
-
-
-// pc2.onsignalingstatechange = onsignalingstatechange
-// pc2.oniceconnectionstatechange = oniceconnectionstatechange
-// pc2.onicegatheringstatechange = onicegatheringstatechange
-
-// function handleCandidateFromPC1 (iceCandidate) {
-//   pc2.addIceCandidate(iceCandidate)
-// }
-
-// pc2.onaddstream = handleOnaddstream
-// pc2.onconnection = handleOnconnection
-
-
-
 function onsignalingstatechange (state) {
-  console.info('answerer signaling state change:', state)
+  console.info('answerer/joiner signaling state change:', state)
 }
 
 function oniceconnectionstatechange (state) {
-  console.info('answerer ice connection state change:', state)
+  console.info('answerer/joiner ice connection state change:', state)
 }
 
 function onicegatheringstatechange (state) {
-  console.info('answerer ice gathering state change:', state)
+  console.info('answerer/joiner ice gathering state change:', state)
 }
 
 
@@ -48,14 +30,16 @@ export default function createAnswer (msg, {room, password, me}) {
         };
         peer.onaddstream = (e) => {
           me.events.emit('peerAdded', msg);
-          console.log('Got remote stream from offerer', e.stream, e);
+          console.log('Got remote stream from offerer/joiner', e.stream, e);
           setTimeout(() => {
             //hack to make sure video element and ref created;
             me.events.emit('peerVideoAdded', {msg, stream: e.stream});
-          }, 1500);
-          // var el = document.getElementById('remoteVideo')
-          // el.autoplay = true
-          // attachMediaStream(el, e.stream)
+          }, 500);
+        }
+
+        peer.onaddtrack= (e) => {
+          console.log('Got remote TRACK from offerer/joiner', e.stream, e)
+          me.events.emit('trackAdded', e);
         }
 
         peer.onconnection = (e) => {
@@ -78,10 +62,14 @@ export default function createAnswer (msg, {room, password, me}) {
                   peer.ondatachannel = function (e) {
                     const datachannel = e.channel || e; // Chrome sends event, FF sends raw channel
                     // console.log('Received datachannel (pc2)', arguments)
+
+                    me.dataChannel = datachannel;
                     
                     datachannel.onopen = function (e) {
                       console.log('data channel connect from remote peer', e);
+                      me.events.emit('dataChannelReady', e);
                       datachannel.send(JSON.stringify({message: 'hello from answerer!'}));
+                      me.events.emit('peerCreated', {});
                     }
                     datachannel.onmessage = function (e) {
                       console.log('Got message (pc2)', e.data);
@@ -100,10 +88,7 @@ export default function createAnswer (msg, {room, password, me}) {
                       
                     }
 
-                    // peer.addStream(me.stream);
                   }
-
-                  
 
                   peer.onsignalingstatechange = onsignalingstatechange;
                   peer.oniceconnectionstatechange = oniceconnectionstatechange;
@@ -118,13 +103,10 @@ export default function createAnswer (msg, {room, password, me}) {
               }
             }
 
-
-
           })
 
       })
 
   });
-  
 
 }

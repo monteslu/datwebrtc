@@ -3,18 +3,16 @@ import { encrypt } from './crypto';
 
 import config from '../config';
 
-
-
 function onsignalingstatechange (state) {
-  console.info('offerer signaling state change:', state)
+  console.info('offerer/host signaling state change:', state)
 }
 
 function oniceconnectionstatechange (state) {
-  console.info('offerer ice connection state change:', state)
+  console.info('offerer/host ice connection state change:', state)
 }
 
 function onicegatheringstatechange (state) {
-  console.info('offerer ice gathering state change:', state)
+  console.info('offerer/host ice gathering state change:', state)
 }
 
 
@@ -38,18 +36,17 @@ export default function createLocalOffer ({room, password, me}) {
     const retVal = {};
 
     me.peer.onaddstream = (e) => {
-     console.log('Got remote stream from answerer', e.stream, e)
-      // var el = document.getElementById('remoteVideo')
-      // el.autoplay = true
-      // attachMediaStream(el, e.stream)
+     console.log('Got remote stream from answerer/host', e.stream, e)
+      setTimeout(() => {
+        //hack to make sure video element and ref created;
+        me.events.emit('peerVideoAdded', {room, stream: e.stream});
+      }, 1500);
       me.events.emit('streamAdded', e);
     }
 
     me.peer.onaddtrack= (e) => {
-      console.log('Got remote TRACK from answerer', e.stream, e)
-      // var el = document.getElementById('remoteVideo')
-      // el.autoplay = true
-      // attachMediaStream(el, e.stream)
+      console.log('Got remote TRACK from answerer/host', e.stream, e)
+     
       me.events.emit('trackAdded', e);
     }
 
@@ -60,12 +57,11 @@ export default function createLocalOffer ({room, password, me}) {
     // create data channel...............
     try {
       me.dataChannel = me.peer.createDataChannel('test', {reliable: true});
-      // activedc = dc1
-      // console.log('Created datachannel (pc1)')
       me.dataChannel.onopen = function (e) {
         me.events.emit('dataChannelReady', e);
         console.log('data channel connect', e);
         me.dataChannel.send(JSON.stringify({message: 'hello from offerer!'}));
+        me.events.emit('peerCreated', {});
       }
       me.dataChannel.onmessage = function (e) {
         console.log('Got message (pc1)', e.data)
@@ -78,7 +74,9 @@ export default function createLocalOffer ({room, password, me}) {
         console.log(e)
         var data = JSON.parse(e.data)
         console.log(data.message);
-
+        if(data.username) {
+          me.events.emit('channelMessage', data);
+        }
       }
     } catch (e) { 
       console.warn('No data channel (pc1)', e); 

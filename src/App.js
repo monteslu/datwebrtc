@@ -6,17 +6,25 @@ import createOffer, { broadcastOffer } from './lib/createOffer';
 import createAnswer from './lib/createAnswer';
 
 import { Button, TextField } from '@material-ui/core';
+import HighlightIcon from '@material-ui/icons/Highlight';
+import EyeIcon from '@material-ui/icons/RemoveRedEye';
 import { EventEmitter } from 'events';
 import config from './config';
 import { find, map } from 'lodash';
+
+console.log('starting up 8');
 
 const styles = {
   text: {
     margin: '8px',
   },
+  button: {
+    margin: '10px'
+  },
+  icon: {
+    marginRight: '5px'
+  }
 }
-
-
 
 //for debugging in console.
 global.encrypt = encrypt;
@@ -47,12 +55,19 @@ class App extends Component {
       peers: []
     }
     this.localVideoRef = React.createRef();
+    this.remoteVideoRef = React.createRef();
     this.remoteRefs = {};
 
     events.on('peerAdded', (msg) => {
-      if(!this.remoteRefs[msg.from]) {
+      if(this.state.hosting && !this.remoteRefs[msg.from]) {
         console.log('creating ref for', msg.from);
         this.remoteRefs[msg.from] = React.createRef();
+        this.setState({peers: this.state.peers});
+        return;
+      }
+      else if (!this.state.hosting) {
+        console.log('creating ref for', msg.from);
+        this.remoteRefs.host = React.createRef();
         this.setState({peers: this.state.peers});
       }
       
@@ -65,10 +80,10 @@ class App extends Component {
     });
 
     events.on('peerVideoAdded', ({msg, stream}) => {
-      if(this.remoteRefs[msg.from].current && !this.remoteRefs[msg.from].current.src) {
-        this.remoteRefs[msg.from].current.src = window.URL.createObjectURL(stream);
-        this.remoteRefs[msg.from].current.play();
-      }
+      
+      this.remoteVideoRef.current.src = window.URL.createObjectURL(stream);
+      this.remoteVideoRef.current.play();
+
     });
 
 
@@ -92,15 +107,12 @@ class App extends Component {
         me.track = track;
         me.stream = stream;
         me.audioTrack = audioTrack;
-        me.events.on('peerCreated', () => {
-          console.log('peer created');
-          if(track) {
-            me.peer.addTrack(track, stream);
-          }
-          if(audioTrack) {
-            me.peer.addTrack(audioTrack, stream);
-          }
-        });
+        if(track) {
+          me.peer.addTrack(track, stream);
+        }
+        if(audioTrack) {
+          me.peer.addTrack(audioTrack, stream);
+        }
         
 
         const videoElement = this.localVideoRef.current; // document.createElement('video');
@@ -146,7 +158,7 @@ class App extends Component {
     console.log('myPeerId', myPeerId);
     if(window.experimental) {
       console.log('experimental good, starting up...');
-      window.experimental.datPeers.broadcast({message: `hello from ${me.myPeerId}`});
+      await window.experimental.datPeers.broadcast({message: `hello from ${me.myPeerId}`});
       window.experimental.datPeers.getSessionData()
         .then((data) => {
           console.log('sessiondata', data);
@@ -154,22 +166,9 @@ class App extends Component {
       window.experimental.datPeers.addEventListener('message', ({datPeer, message}) => {
         console.log('generic message received', message, datPeer);
         const { state } = this;
-        if(state.joining) {
-          if(message.offer && message.room === state.room && message.from !== state.me.myPeerId) {
-            createAnswer(message, state)
-              .then((peer) => {
-                state.peers.push(peer);
-
-                const remotePeer = find(state.peers, { peerId: message.from });
-                if(remotePeer && !remotePeer.reOffered) {
-                  remotePeer.reOffered = true;
-                  //after answering, make another offer for them to answer.
-                  broadcastOffer(state.me, state.room, state.password);
-                }
-                
-              })
-          }
-          else if(message.answer && message.room === state.room && message.from !== state.me.myPeerId && message.answerTo === state.me.myPeerId) {
+        if(message.room === state.room && message.from !== state.me.myPeerId) {
+          if(state.joining && message.answer && message.answerTo === state.me.myPeerId) {
+          
             decrypt(message.answer, state.password, message.uuid)
               .then((answer) => {
                 console.log('answer recieved');
@@ -183,8 +182,24 @@ class App extends Component {
                 const answerDesc = new RTCSessionDescription(JSON.parse(answer));
                 state.me.peer.setRemoteDescription(answerDesc);
               });
+            
+          } else if (state.hosting && message.offer) {
+  
+            createAnswer(message, state)
+              .then((peer) => {
+                state.peers.push(peer);
+  
+                const remotePeer = find(state.peers, { peerId: message.from });
+                if(remotePeer && !remotePeer.reOffered) {
+                  remotePeer.reOffered = true;
+                  //after answering, make another offer for them to answer.
+                  broadcastOffer(state.me, state.room, state.password);
+                }
+                
+              })
           }
         }
+        
 
       });
     }
@@ -211,6 +226,15 @@ class App extends Component {
     this.setState({connected: true});
   };
 
+  handleHost = async () => {
+    this.setState({hosting: true});
+    localStorage.username = this.state.username;
+    localStorage.room = this.state.room;
+    this.state.me.cameraShot = await this.startVideo();
+    
+    this.setState({connected: true});
+  };
+
   handleSend = () => {
     const msg = {message: this.state.message, username: this.state.username};
     this.state.me.dataChannel.send(JSON.stringify(msg));
@@ -219,64 +243,72 @@ class App extends Component {
   };
 
   render() {
+    const { state } = this;
     return (
       <div className="App">
         <header className="App-header">
           WebRTC with dat:// signalling
         </header>
 
-        {this.state.connected ? (
+        {state.connected ? (
           <div>
-            <div>{`Room: ${this.state.room}`}</div>
+            <div>{`${state.hosting ? 'Hosting ' : ''}Room: ${state.room}`}</div>
           </div>
           ) : 
         (<div><TextField
           label="Name"
-          value={this.state.username}
+          value={state.username}
           onChange={this.handleChange('username')}
           style={styles.text}
         />
         <TextField
           label="Room Name"
-          value={this.state.room}
+          value={state.room}
           onChange={this.handleChange('room')}
           style={styles.text}
         />
         <TextField
           label="Pass Phrase"
-          value={this.state.password}
+          value={state.password}
           onChange={this.handleChange('password')}
           style={styles.text}
         />
-        <Button 
+        <Button
+          style={styles.button}
+          variant="contained"
+          color="primary" 
+          onClick={this.handleHost}
+          disabled={!state.username || !state.room || !state.password || state.joining || state.hosting}
+        >
+          <HighlightIcon style={styles.icon}/> Create Room
+        </Button>
+        <Button
+          style={styles.button}
           variant="contained"
           color="primary" 
           onClick={this.handleJoin}
-          disabled={!this.state.username || !this.state.room || !this.state.password || this.state.joining}
+          disabled={!state.username || !state.room || !state.password || state.joining || state.hosting}
         >
-          Join
-        </Button></div>)}
+          <EyeIcon style={styles.icon}/> Join Room
+        </Button>
+        </div>)}
         <span className="videoSpan">
           <video id="localVideo" ref={this.localVideoRef} />
         </span>
-        {map(this.state.peers, (p) => {
-          return (
-            <span key={p.peerId} id={p.peerId + '_div'} className="videoSpan">
-              <video ref={this.remoteRefs[p.peerId]} id={p.peerId} />
-            </span>
-          )
-        })}
+        <span id={'peer_div'} className="videoSpan">
+          <video ref={this.remoteVideoRef} id="remoteVideo" />
+        </span>
 
-        {this.state.dataChannelReady ? (
+        {state.dataChannelReady ? (
           <div className="messageBox">
             <div className="messages">
-            {map(this.state.messages, (mess) => {
+            {map(state.messages, (mess) => {
               return (<div className="messageRow"><span className="messageUser">{mess.username}:</span><span className="messageText">{mess.message}</span></div>)
             })}</div>
             <div className="inputArea">
               <TextField
                 label="Message"
-                value={this.state.message}
+                value={state.message}
                 onChange={this.handleChange('message')}
                 style={styles.text}
               />
@@ -284,7 +316,7 @@ class App extends Component {
                 variant="contained"
                 color="primary" 
                 onClick={this.handleSend}
-                disabled={!this.state.message}
+                disabled={!state.message}
               >Send</Button>
             </div>
           </div>
